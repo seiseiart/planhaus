@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17324d">
+  <title>築間 Planhaus｜房屋平面設計工作台</title>
+  <meta name="description" content="在瀏覽器中快速繪製牆體、房間、門窗與家具，完成清楚可分享的房屋平面設計圖。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="築間首頁">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><b>築間</b><small>PLANHAUS</small></span>
+    </a>
+    <label class="project-name"><span>專案</span><input id="projectName" value="我的新家" aria-label="專案名稱"></label>
+    <div class="top-actions">
+      <span id="saveState" class="save-state"><i></i> 已儲存</span>
+      <button class="icon-btn" id="undoBtn" title="復原 Ctrl+Z" aria-label="復原">↶</button>
+      <button class="icon-btn" id="redoBtn" title="重做 Ctrl+Y" aria-label="重做">↷</button>
+      <button class="secondary-btn" id="newBtn">新增圖面</button>
+      <button class="secondary-btn file-btn" id="fileBtn" title="圖面檔案 Ctrl+O">圖面檔</button>
+      <button class="primary-btn" id="exportBtn">匯出圖面 <span>↗</span></button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="tool-rail" aria-label="繪圖工具">
+      <div class="tool-group">
+        <span class="group-label">繪製</span>
+        <button class="tool active" data-tool="select"><span class="tool-icon">↖</span><span>選取</span><kbd>V</kbd></button>
+        <button class="tool" data-tool="wall"><span class="tool-icon wall-icon"></span><span>牆體</span><kbd>W</kbd></button>
+        <button class="tool" data-tool="room"><span class="tool-icon room-icon"></span><span>房間</span><kbd>R</kbd></button>
+        <button class="tool" data-tool="door"><span class="tool-icon door-icon"></span><span>門</span><kbd>D</kbd></button>
+        <button class="tool" data-tool="window"><span class="tool-icon window-icon"></span><span>窗戶</span><kbd>N</kbd></button>
+      </div>
+      <div class="tool-group">
+        <span class="group-label">配置</span>
+        <button class="tool" data-tool="furniture"><span class="tool-icon">▦</span><span>家具</span><kbd>F</kbd></button>
+        <button class="tool" data-tool="dimension"><span class="tool-icon">↔</span><span>輸入尺寸</span><kbd>I</kbd></button>
+        <button class="tool danger-tool" data-tool="erase"><span class="tool-icon">⌫</span><span>刪除</span><kbd>E</kbd></button>
+      </div>
+      <div class="scale-card">
+        <span>圖面比例</span>
+        <strong>1 : 50</strong>
+        <small>按 Shift 對齊格線</small>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="contextbar">
+        <div><span class="eyebrow">目前工具</span><strong id="toolTitle">選取與移動</strong></div>
+        <p id="toolHint">點選圖面元素，查看或調整設定</p>
+        <div class="view-actions">
+          <button id="gridBtn" class="mini-btn active"># 格線</button>
+          <button id="fitBtn" class="mini-btn">⊡ 適合畫面</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap" id="canvasWrap">
+        <svg id="planCanvas" viewBox="0 0 1200 760" role="application" aria-label="房屋平面設計畫布">
+          <defs>
+            <pattern id="smallGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#cfd6d5" stroke-width="0.8"/>
+            </pattern>
+            <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+              <rect width="100" height="100" fill="url(#smallGrid)"/>
+              <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#aab6b4" stroke-width="1.2"/>
+            </pattern>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#17324d" flood-opacity=".12"/></filter>
+          </defs>
+          <rect id="gridRect" width="1200" height="760" fill="url(#grid)"/>
+          <g id="drawingLayer"></g>
+          <g id="previewLayer" pointer-events="none"></g>
+        </svg>
+        <div class="canvas-badge"><span id="cursorPosition">X 0.0 m · Y 0.0 m</span><b>吸附 0.5 m</b></div>
+        <div class="zoom-control">
+          <button id="zoomOut" aria-label="縮小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="放大">＋</button>
+        </div>
+        <div id="emptyTip" class="empty-tip">
+          <div class="tip-illustration"><span></span><span></span><span></span><i></i></div>
+          <strong>從牆體或房間開始</strong>
+          <p>按住滑鼠拖曳即可繪製，所有線段會自動吸附格線。</p>
+          <button data-start="room">繪製第一個房間</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <div class="inspector-head"><div><span class="eyebrow">設計資訊</span><h2>空間總覽</h2></div><button id="closeInspector" aria-label="收合">›</button></div>
+      <div class="area-card"><span>估算室內面積</span><strong><b id="totalArea">0.0</b> m²</strong><small id="pingArea">約 0.0 坪</small></div>
+      <div class="stats-row"><div><span>房間</span><b id="roomCount">0</b></div><div><span>開口</span><b id="openingCount">0</b></div><div><span>家具</span><b id="furnitureCount">0</b></div></div>
+
+      <section id="selectionPanel" class="panel-section hidden">
+        <div class="section-title"><h3>物件設定</h3><button id="deleteSelected" title="刪除物件">刪除</button></div>
+        <label>名稱<input id="itemName" placeholder="輸入名稱"></label>
+        <div class="field-row"><label>寬度（m）<input id="itemWidth" type="number" min="0.5" step="0.5"></label><label>高度（m）<input id="itemHeight" type="number" min="0.5" step="0.5"></label></div>
+        <label>填色<input id="itemColor" type="color" value="#e9e3d5"></label>
+      </section>
+
+      <section id="furniturePanel" class="panel-section hidden">
+        <div class="section-title"><h3>家具圖庫</h3><span>點擊後放置</span></div>
+        <div class="furniture-grid">
+          <button data-furniture="sofa"><span>▰</span>沙發</button><button data-furniture="bed"><span>▤</span>床組</button>
+          <button data-furniture="table"><span>▣</span>餐桌</button><button data-furniture="desk"><span>▭</span>書桌</button>
+          <button data-furniture="island"><span>▥</span>中島</button><button data-furniture="plant"><span>✣</span>植栽</button>
+          <button data-furniture="bathtub"><span>▱</span>浴缸</button><button data-furniture="toilet"><span>◒</span>馬桶</button>
+          <button data-furniture="sink"><span>◉</span>洗手台</button><button data-furniture="cabinet"><span>▥</span>櫃體</button>
+          <button data-furniture="stairs"><span>▰</span>樓梯</button><button data-furniture="column"><span>■</span>結構柱</button>
+        </div>
+      </section>
+
+      <section id="openingPanel" class="panel-section hidden">
+        <div class="section-title"><h3 id="openingTitle">開口圖例</h3><span>選擇後放置</span></div>
+        <div class="opening-grid">
+          <button data-opening="single">單開門</button><button data-opening="double">雙開門</button>
+          <button data-opening="sliding">拉門</button><button data-opening="folding">折疊門</button>
+          <button data-opening="fixed">固定窗</button><button data-opening="slider">橫拉窗</button>
+          <button data-opening="bay">凸窗</button><button data-opening="screen">紗窗</button>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-title"><h3>房間清單</h3><span id="roomListCount">0 個空間</span></div>
+        <div id="roomList" class="room-list"><p class="empty-list">尚未建立房間</p></div>
+      </section>
+      <div class="tips-card"><b>快捷提示</b><p>雙擊房間可顯示角點並拖曳變形，拖曳邊上「＋」新增角點、右鍵刪除角點。門窗與家具可拖曳並自動吸附牆面，旋轉控制點以 15° 對齊（Alt 自由）。</p></div>
+    </aside>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="appModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <span class="eyebrow">PLANHAUS</span>
+      <h2 id="modalTitle">確認操作</h2>
+      <p id="modalMessage"></p>
+      <div id="modalFields" class="modal-fields"></div>
+      <div class="modal-actions"><button id="modalCancel" class="secondary-btn">取消</button><button id="modalConfirm" class="primary-btn">確認</button></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script src="planhaus-pro.js"></script>
+</body>
+</html>
