@@ -136,7 +136,7 @@ Cloud 完成修改後，可用以下任一方式交回：
 
 ### 資料模型新增欄位（皆為選填，舊資料相容）
 
-`door/window`：`width`、`height`、`sill`（窗）、`wallRef: {kind:'wall'|'room', id, edge?}`、`rotationManual`；`furniture`：`wallRef`、`rotationManual`；`wall`：`thickness`；`room`：`ceiling`。JSON 檔格式：`{format:'planhaus', version:1, project, exportedAt, units:{pxPerMeter:40}, items}`。
+`door/window`：`width`、`height`、`sill`（窗）、`wallRef: {kind:'wall'|'room', id, edge?}`、`rotationManual`；`furniture`：`wallRef`、`rotationManual`，櫃體與結構柱另有 `width`、`height`（平面深度）；`wall`：`thickness`；`room`：`ceiling`。JSON 檔格式：`{format:'planhaus', version:1, project, exportedAt, units:{pxPerMeter:40}, items}`。
 
 ### 驗收結果（Playwright 自動化，Chromium）
 
@@ -158,3 +158,12 @@ Cloud 完成修改後，可用以下任一方式交回：
 - 部署：`.github/workflows/pages.yml`（`node --check` → 上傳 `dist/` → `deploy-pages`）。Repo 設定 Pages → Source 必須是「GitHub Actions」。
 - 圖面資料存於各網域的 localStorage，不會自動跨網址。`planhaus-pro.js` 的 `CANONICAL_URL` 會在 `*.chatgpt.site` 顯示搬遷橫幅（匯出 JSON + 前往新網址）。
 - **待 Codex 執行一次**：把目前 `dist/` 發布到舊 Sites 專案，讓舊使用者看到搬遷橫幅並能匯出 JSON；之後舊 Sites 不再更新。
+
+## 2026-11-12 家具與固定設施調整
+
+- 家具手動旋轉後會保留角度；拖曳時不再被靠牆吸附重新覆蓋方向。
+- 櫃體與結構柱可在「建築屬性」輸入寬度與深度，畫布外框與尺寸標註會即時更新。
+- 「輸入尺寸」工具也支援點擊櫃體與結構柱後輸入寬度／深度。
+- JSON 匯入／匯出保留家具 `width`、`height` 欄位。
+- 家具圖庫移除植栽；舊圖面中的既有植栽物件仍可載入，避免破壞使用者資料。
+- 瀏覽器驗收：櫃體旋轉 90°、櫃體 4.00 × 1.20 m、結構柱 0.60 × 0.80 m 均正確反映到 SVG，無主控台錯誤。

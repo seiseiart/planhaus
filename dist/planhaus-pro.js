@@ -24,6 +24,7 @@
 
   const DOOR_KINDS = ['single', 'double', 'sliding', 'folding'], WINDOW_KINDS = ['fixed', 'slider', 'bay', 'screen'];
   const FURNITURE = ['sofa', 'bed', 'table', 'desk', 'island', 'plant', 'bathtub', 'toilet', 'sink', 'cabinet', 'stairs', 'column'];
+  const RESIZABLE_FURNITURE = ['cabinet', 'column'];
   // 預設尺寸＝app.js 原始繪圖尺寸（例如單開門 36px = 0.9m），比例 1 時外觀不變
   const OPENING_DEFAULTS = {
     single: { width: .9, height: 2.1 }, double: { width: 1.8, height: 2.1 }, sliding: { width: 1.9, height: 2.1 }, folding: { width: 1.9, height: 2.1 },
@@ -102,7 +103,7 @@
     return true;
   }
   function snapFurniture(it, p) {
-    const d = P.furnitureDims(it.name), reach = d.h / 2 + 18 * viewScale();
+    const d = P.furnitureDims(it), reach = d.h / 2 + 18 * viewScale();
     const hit = nearestSegment(p, reach + 8);
     if (!hit) return false;
     const { s, pr } = hit, n = normalFor(s, pr, p), off = d.h / 2 + s.thick / 2;
@@ -186,7 +187,7 @@
       move.moved = true;
       svg.classList.add('dragging');
       const target = { x: nx, y: ny };
-      const snapped = !e.altKey && (it.type === 'furniture' ? (!['plant', 'column'].includes(it.name) && snapFurniture(it, target)) : snapOpening(it, target));
+      const snapped = !e.altKey && (it.type === 'furniture' ? (!['plant', 'column'].includes(it.name) && !it.rotationManual && snapFurniture(it, target)) : snapOpening(it, target));
       if (!snapped) {
         it.x = nx; it.y = ny;
         if (it.wallRef) { delete it.wallRef; it.rotationManual = true; }
@@ -301,7 +302,7 @@
 
     // 選取物件：旋轉控制點與建築標註
     if (isFacility(sel)) {
-      const r = rad(sel.rotation || 0), local = sel.type === 'furniture' ? -(P.furnitureDims(sel.name).h / 2 + 26) : -34;
+      const r = rad(sel.rotation || 0), local = sel.type === 'furniture' ? -(P.furnitureDims(sel).h / 2 + 26) : -34;
       // 本地 (0, L) → 世界 (x − sin r·L, y + cos r·L)
       const toWorld = L => ({ x: sel.x - Math.sin(r) * L, y: sel.y + Math.cos(r) * L });
       const { x: wx, y: wy } = toWorld(local);
@@ -315,6 +316,11 @@
         const a = openingAttrs(sel), s = a.width / a.defWidth, at = toWorld(sel.type === 'door' ? 36 * s + 18 : 26);
         const t = el('text', { x: at.x, y: at.y + 4, class: 'arch-annot' });
         t.textContent = `W${a.width.toFixed(2)} × H${a.height.toFixed(2)}` + (sel.type === 'window' ? ` · 台${a.sill.toFixed(2)}` : '');
+        ui.append(t);
+      } else if (RESIZABLE_FURNITURE.includes(sel.name)) {
+        const d = P.furnitureDims(sel), at = toWorld(d.h / 2 + 20);
+        const t = el('text', { x: at.x, y: at.y + 4, class: 'arch-annot' });
+        t.textContent = `W${toM(d.w).toFixed(2)} × D${toM(d.h).toFixed(2)}`;
         ui.append(t);
       }
       layer.append(ui);
@@ -369,6 +375,10 @@
     } else if (it.type === 'furniture') {
       tag.textContent = it.wallRef ? '● 靠牆' : '';
       tag.className = it.wallRef ? 'snap-on' : '';
+      if (RESIZABLE_FURNITURE.includes(it.name)) {
+        const d = P.furnitureDims(it);
+        row(numField('寬度', toM(d.w), { key: 'width', min: .1, max: 12, step: .05 }), numField('深度', toM(d.h), { key: 'height', min: .1, max: 12, step: .05 }));
+      }
       row(numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       rotateButtons();
     } else if (it.type === 'wall') {
@@ -418,7 +428,7 @@
     wall: ['id', 'type', 'x1', 'y1', 'x2', 'y2', 'thickness', 'name', 'color'],
     door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'name', 'color'],
     window: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'sill', 'name', 'color'],
-    furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'color']
+    furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'color']
   };
   const finite = v => typeof v === 'number' && Number.isFinite(v);
   function normalizeDrawing(raw) {
