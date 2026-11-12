@@ -40,7 +40,7 @@
   // 開口沿本地 x 軸的範圍（px），單開門鉸鏈在原點
   function openingSpan(it) {
     const a = openingAttrs(it), w = toPx(a.width);
-    return kindOf(it) === 'single' ? [0, w] : [-w / 2, w / 2];
+    return kindOf(it) === 'single' ? (it.hinge === 'right' ? [-w, 0] : [0, w]) : [-w / 2, w / 2];
   }
   const wallThickness = w => w.thickness ?? WALL_THICKNESS;
 
@@ -123,6 +123,7 @@
       const kind = (tool === 'door' ? DOOR_KINDS : WINDOW_KINDS).includes(sub) ? sub : (tool === 'door' ? 'single' : 'fixed');
       const d = OPENING_DEFAULTS[kind];
       Object.assign(common, { width: d.width, height: d.height }, tool === 'window' ? { sill: d.sill } : {});
+      if (tool === 'door') Object.assign(common, { swing: 'in', hinge: 'left' });
       if (snapOpening(Object.assign(common, { type: tool, kind }), p)) P.toast('已吸附至牆面');
       delete common.type; delete common.kind; // 由 app.js 設定
     } else if (tool === 'furniture' && !['plant', 'column'].includes(sub)) {
@@ -372,6 +373,7 @@
       if (it.type === 'window') row(numField('窗台高度', a.sill, { key: 'sill', min: 0, max: 3 }), numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       else row(numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       rotateButtons();
+      if (it.type === 'door' && ['single', 'double'].includes(kindOf(it))) doorDirectionButtons();
     } else if (it.type === 'furniture') {
       tag.textContent = it.wallRef ? '● 靠牆' : '';
       tag.className = it.wallRef ? 'snap-on' : '';
@@ -407,6 +409,21 @@
       archPanel.append(wrap);
     }
 
+    function doorDirectionButtons() {
+      const wrap = document.createElement('div'); wrap.className = 'arch-actions door-actions';
+      const swing = document.createElement('button'); swing.className = 'mini-btn';
+      swing.textContent = it.swing === 'out' ? '目前外開・改為內開' : '目前內開・改為外開';
+      swing.onclick = () => { const before = P.snapshot(); it.swing = it.swing === 'out' ? 'in' : 'out'; P.commit('門片方向已更新', before); };
+      wrap.append(swing);
+      if (kindOf(it) === 'single') {
+        const hinge = document.createElement('button'); hinge.className = 'mini-btn';
+        hinge.textContent = it.hinge === 'right' ? '鉸鏈在右・換到左側' : '鉸鏈在左・換到右側';
+        hinge.onclick = () => { const before = P.snapshot(); it.hinge = it.hinge === 'right' ? 'left' : 'right'; P.commit('門片左右已更新', before); };
+        wrap.append(hinge);
+      }
+      archPanel.append(wrap);
+    }
+
     archPanel.querySelectorAll('input[data-key]').forEach(input => input.addEventListener('change', () => {
       const key = input.dataset.key, v = Number(input.value), min = input.min === '' ? -Infinity : +input.min, max = input.max === '' ? Infinity : +input.max;
       if (!Number.isFinite(v) || v < min || v > max) { P.toast(`請輸入 ${input.min || '−∞'}–${input.max || '∞'} 之間的數值`); input.blur(); P.render(); return; }
@@ -426,7 +443,7 @@
   const ALLOWED = {
     room: ['id', 'type', 'x', 'y', 'w', 'h', 'points', 'name', 'color', 'ceiling'],
     wall: ['id', 'type', 'x1', 'y1', 'x2', 'y2', 'thickness', 'name', 'color'],
-    door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'name', 'color'],
+    door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'swing', 'hinge', 'name', 'color'],
     window: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'sill', 'name', 'color'],
     furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'color']
   };
@@ -453,7 +470,11 @@
       } else if (it.type === 'wall') ok = ['x1', 'y1', 'x2', 'y2'].every(k => finite(it[k]));
       else {
         ok = finite(it.x) && finite(it.y);
-        if (it.type === 'door' && !DOOR_KINDS.includes(it.kind)) it.kind = 'single';
+        if (it.type === 'door') {
+          if (!DOOR_KINDS.includes(it.kind)) it.kind = 'single';
+          if (!['in', 'out'].includes(it.swing)) it.swing = 'in';
+          if (!['left', 'right'].includes(it.hinge)) it.hinge = 'left';
+        }
         if (it.type === 'window' && !WINDOW_KINDS.includes(it.kind)) it.kind = 'fixed';
         if (it.type === 'furniture' && !FURNITURE.includes(it.name)) ok = false;
         it.rotation = finite(it.rotation) ? norm360(it.rotation) : 0;
