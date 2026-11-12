@@ -133,6 +133,36 @@
     }
   });
 
+  /* ---------------- 門片拖曳放置：拖曳側決定內／外開 ---------------- */
+  let doorPlace = null;
+  P.hooks.pointerdown.push(e => {
+    if (P.tool !== 'door' || e.button !== 0) return;
+    const kind = DOOR_KINDS.includes(P.openingType) ? P.openingType : 'single';
+    doorPlace = { start: P.point(e, true), rawStart: P.rawPoint(e), kind, pointerId: e.pointerId };
+    try { svg.setPointerCapture(e.pointerId); } catch {}
+    P.preview.innerHTML = '';
+    return true;
+  });
+  P.hooks.pointermove.push(e => {
+    if (!doorPlace) return;
+    const p = P.rawPoint(e);
+    P.preview.innerHTML = '';
+    P.preview.append(el('line', { x1: doorPlace.start.x, y1: doorPlace.start.y, x2: p.x, y2: p.y, class: 'door-drag-guide' }));
+    return true;
+  });
+  P.hooks.pointerup.push(e => {
+    if (!doorPlace) return;
+    const place = doorPlace; doorPlace = null; P.preview.innerHTML = '';
+    const p = place.start, room = P.roomAt(p), d = OPENING_DEFAULTS[place.kind];
+    const item = { type: 'door', kind: place.kind, x: p.x, y: p.y, parentRoomId: room?.id || null, rotation: 0, width: d.width, height: d.height, swing: 'in', hinge: 'left' };
+    snapOpening(item, p);
+    const end = P.rawPoint(e), dx = end.x - place.rawStart.x, dy = end.y - place.rawStart.y, r = rad(item.rotation || 0), inward = { x: -Math.sin(r), y: Math.cos(r) };
+    if (Math.hypot(dx, dy) >= 8) item.swing = dx * inward.x + dy * inward.y >= 0 ? 'in' : 'out';
+    P.addItem(item);
+    P.toast(item.swing === 'in' ? '已建立內開門' : '已建立外開門');
+    return true;
+  });
+
   /* ---------------- 牆體繪製：端點吸附既有牆端點與房間角點 ---------------- */
   let wallSnapMark = null;
   P.hooks.snapPoint.push((r, evt, raw) => {
@@ -160,6 +190,7 @@
   let move = null, rotate = null;
   P.hooks.itemPointerDown.push((e, item) => {
     if (!isFacility(item) || e.button !== 0) return;
+    e.preventDefault();
     move = { id: item.id, start: P.rawPoint(e), ox: item.x, oy: item.y, before: P.snapshot(), moved: false, snapped: false };
     try { svg.setPointerCapture(e.pointerId); } catch {}
   });
@@ -262,10 +293,11 @@
       if (it.type === 'door' || it.type === 'window') {
         const a = openingAttrs(it), s = a.width / a.defWidth, [lo, hi] = openingSpan({ ...it, width: a.defWidth });
         // 透明點擊範圍：開口線很細，補一個容易點選的區域
-        node.prepend(el('rect', { x: it.x + lo, y: it.y - 9, width: hi - lo, height: 18, class: 'opening-hit' }));
+        node.prepend(el('rect', { x: it.x + lo, y: it.y - 18, width: hi - lo, height: 36, class: 'opening-hit' }));
         if (Math.abs(s - 1) > .001) {
           const sy = it.type === 'door' ? s : 1;
-          node.setAttribute('transform', `rotate(${it.rotation || 0} ${it.x} ${it.y}) translate(${it.x} ${it.y}) scale(${s} ${sy}) translate(${-it.x} ${-it.y})`);
+          const visualRotation = (it.rotation || 0) + (it.flipped ? 180 : 0);
+          node.setAttribute('transform', `rotate(${visualRotation} ${it.x} ${it.y}) translate(${it.x} ${it.y}) scale(${s} ${sy}) translate(${-it.x} ${-it.y})`);
           node.classList.add('pro-scaled');
         }
       }
@@ -303,7 +335,7 @@
 
     // 選取物件：旋轉控制點與建築標註
     if (isFacility(sel)) {
-      const r = rad(sel.rotation || 0), local = sel.type === 'furniture' ? -(P.furnitureDims(sel).h / 2 + 26) : -34;
+      const r = rad((sel.rotation || 0) + (sel.flipped ? 180 : 0)), local = sel.type === 'furniture' ? -(P.furnitureDims(sel).h / 2 + 26) : -34;
       // 本地 (0, L) → 世界 (x − sin r·L, y + cos r·L)
       const toWorld = L => ({ x: sel.x - Math.sin(r) * L, y: sel.y + Math.cos(r) * L });
       const { x: wx, y: wy } = toWorld(local);
@@ -329,7 +361,20 @@
     renderArchPanel(sel);
   }
   P.hooks.afterRender.push(decorate);
-  svg.addEventListener('contextmenu', e => { if (e.target.closest?.('.vertex-handle, .edge-handle') || P.editingRoomId) e.preventDefault(); });
+  svg.addEventListener('contextmenu', e => {
+    if (e.target.closest?.('.vertex-handle, .edge-handle')) { e.preventDefault(); return; }
+    const node = e.target.closest?.('[data-id]'), it = node && byId(node.dataset.id);
+    if (it && ['door', 'window', 'furniture'].includes(it.type)) {
+      e.preventDefault(); e.stopPropagation();
+      const before = P.snapshot(); P.selected = it.id;
+      if (it.type === 'door') it.swing = it.swing === 'out' ? 'in' : 'out';
+      else if (it.type === 'window') it.flipped = !it.flipped;
+      else { it.rotation = norm360((it.rotation || 0) + 90); it.rotationManual = true; delete it.wallRef; }
+      P.commit(it.type === 'furniture' ? '家具已順時針旋轉' : '開口方向已翻轉', before);
+      return;
+    }
+    if (P.editingRoomId) e.preventDefault();
+  });
 
   // 匯出 SVG 前移除編輯用 UI（app.js 的 onclick 在目標階段執行，此處為捕獲階段）
   window.addEventListener('click', e => {
@@ -443,8 +488,8 @@
   const ALLOWED = {
     room: ['id', 'type', 'x', 'y', 'w', 'h', 'points', 'name', 'color', 'ceiling'],
     wall: ['id', 'type', 'x1', 'y1', 'x2', 'y2', 'thickness', 'name', 'color'],
-    door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'swing', 'hinge', 'name', 'color'],
-    window: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'sill', 'name', 'color'],
+    door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'swing', 'hinge', 'flipped', 'name', 'color'],
+    window: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'sill', 'flipped', 'name', 'color'],
     furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'color']
   };
   const finite = v => typeof v === 'number' && Number.isFinite(v);
@@ -481,6 +526,7 @@
         if (it.wallRef && (typeof it.wallRef !== 'object' || !['wall', 'room'].includes(it.wallRef.kind))) delete it.wallRef;
         if (it.wallRef) it.wallRef = { kind: it.wallRef.kind, id: String(it.wallRef.id ?? ''), ...(finite(it.wallRef.edge) ? { edge: it.wallRef.edge } : {}) };
         if (it.rotationManual !== undefined) it.rotationManual = !!it.rotationManual;
+        if (it.flipped !== undefined) it.flipped = !!it.flipped;
       }
       ['width', 'height', 'sill', 'thickness', 'ceiling'].forEach(k => { if (it[k] !== undefined && !(finite(it[k]) && it[k] >= 0 && it[k] < 100)) delete it[k]; });
       if (it.type !== 'furniture' && it.name !== undefined) it.name = String(it.name).slice(0, 60);

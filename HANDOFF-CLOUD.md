@@ -1,6 +1,6 @@
 # 築間 Planhaus — Cloud 協作交接
 
-更新日期：2026-11-10（Asia/Taipei）
+更新日期：2026-11-12（Asia/Taipei）
 
 ## 專案識別
 
@@ -17,8 +17,9 @@
 1. 完整閱讀本文件。
 2. 主要介面位於 `dist/index.html`。
 3. 全部視覺樣式位於 `dist/styles.css`。
-4. 平面圖資料模型、SVG 繪圖與互動位於 `dist/app.js`。
-5. `.openai/hosting.json` 保存 Sites 專案識別與靜態輸出目錄，修改時必須保留 `project_id`。
+4. 平面圖核心資料模型、SVG 繪圖與互動位於 `dist/app.js`。
+5. 建築屬性、門窗吸附／拖曳、圖面 JSON 與擴充互動位於 `dist/planhaus-pro.js`。
+6. `.openai/hosting.json` 保存 Sites 專案識別與靜態輸出目錄，修改時必須保留 `project_id`。
 
 ## 現有功能
 
@@ -31,6 +32,10 @@
 - 固定窗、橫拉窗、凸窗、紗窗。
 - 浴缸、馬桶、洗手台、櫃體、樓梯、結構柱等設施。
 - 尺寸輸入、SVG 匯出及瀏覽器本機自動儲存。
+- 房間外框為 6px；門窗會以遮罩在牆線上形成實際開口。
+- 門可沿牆拖曳；建立門時由拖曳至牆內／牆外決定弧線方向。
+- 右鍵門可切換內外開、右鍵窗可翻轉、右鍵一般家具會順時針旋轉 90°。
+- 平板橫向使用精簡工具列；820px 以下右側設定改為可收合抽屜。
 
 ## 資料模型重點
 
@@ -54,6 +59,7 @@ JavaScript 語法檢查：
 
 ```text
 node --check dist/app.js
+node --check dist/planhaus-pro.js
 ```
 
 最低驗收項目：
@@ -66,6 +72,10 @@ node --check dist/app.js
 6. 房間內不顯示個別平方公尺。
 7. 門窗與家具能歸入房間並隨房間移動。
 8. 主控台沒有 JavaScript 錯誤。
+9. 門建立時向房內／房外拖曳會得到不同開向，選取後可沿牆拖動位置。
+10. 右鍵門窗會翻轉；右鍵一般家具會順時針旋轉 90°。
+11. 房間外框為 6px，門窗所在牆段顯示開口。
+12. 1024×768 與 768×1024 不產生水平溢位；直向可開關設定抽屜。
 
 ## Sites 發布規則
 
@@ -77,17 +87,15 @@ node --check dist/app.js
 
 ## 建議的下一階段
 
-1. 將 localStorage 專案升級為可命名、可匯入／匯出的 JSON 圖面檔。
-2. 增加物件旋轉控制點與牆體自動吸附。
-3. 增加門窗高度、窗台高度與牆厚等建築屬性。
-4. 為多邊形房間加入「新增角點」與「刪除角點」。
-5. 增加列印比例、標註線及 PDF 輸出。
-6. 若需要跨裝置保存，再評估加入後端資料庫與使用者登入。
+1. 增加列印比例、標註線及 PDF 輸出。
+2. 讓吸附在房間邊上的門窗在角點變形時跟著牆段移動。
+3. 加入可調整長度的牆面開口與更完整的門窗施工標註。
+4. 若需要跨裝置保存，再評估加入後端資料庫與使用者登入。
 
 ## 給 Cloud 的接手提示詞
 
 ```text
-你要接手「築間 Planhaus」房屋平面設計網站。請先完整閱讀 HANDOFF-CLOUD.md，保留 .openai/hosting.json 的 project_id 與既有公開網址。這是 buildless 靜態網站，主要修改 dist/index.html、dist/styles.css、dist/app.js。修改前先理解多邊形房間、parentRoomId 與 localStorage 資料模型；修改後執行 node --check dist/app.js，並逐項完成 HANDOFF-CLOUD.md 的最低驗收。不要新增外部套件、不要建立新的 Sites 專案、不要把任何憑證寫入檔案。完成後列出修改檔案、測試結果與仍待處理事項。
+你要接手「築間 Planhaus」房屋平面設計網站。請先完整閱讀 HANDOFF-CLOUD.md，保留 .openai/hosting.json 的 project_id 與既有公開網址。這是 buildless 靜態網站，主要修改 dist/index.html、dist/styles.css、dist/app.js、dist/planhaus-pro.js。修改前先理解多邊形房間、parentRoomId、wallRef 與 localStorage 資料模型；修改後執行 node --check dist/app.js、node --check dist/planhaus-pro.js，並逐項完成 HANDOFF-CLOUD.md 的最低驗收。不要新增外部套件、不要建立新的 Sites 專案、不要把任何憑證寫入檔案。完成後列出修改檔案、測試結果與仍待處理事項。
 ```
 
 ## 協作回傳方式
@@ -176,3 +184,15 @@ Cloud 完成修改後，可用以下任一方式交回：
 - 新門預設 `swing: 'in'`、`hinge: 'left'`，舊圖面缺少欄位時自動補相同預設。
 - JSON 圖面檔新增保存門片 `swing`、`hinge` 欄位，舊格式仍可匯入。
 - 瀏覽器驗收：房間與角點編輯牆線均為 12px；單開門內開、外開、左右鉸鏈四種組合的線段與弧線座標均正確，無主控台錯誤。
+
+## 2026-11-12 門窗手勢、牆面開口與平板介面
+
+- 本段為目前最新版，取代上一段的 12px 房間外框：房間外框統一改為 **6px**。
+- `renderOpening()` 在門窗下方繪製 `plan-opening-cut` 遮罩，門窗所在牆段不再保留連續外框線。
+- 修正選取門窗時的事件順序，門與窗現在可直接拖曳並重新吸附牆面；點擊區域擴大到 36px，方便觸控操作。
+- 建立門時可從牆面向房內或房外拖曳，拖曳向量會寫入 `door.swing`，決定弧線方向。
+- 右鍵行為：門切換內／外開、窗切換 `flipped`、一般家具順時針旋轉 90°。
+- 門窗 JSON 白名單新增 `flipped`，舊圖面沒有該欄位時仍維持原方向。
+- 1180px 以下改用 88px 圖示工具列與 44px 以上觸控目標；820px 以下改用 76px 工具列及可收合的右側設定抽屜。
+- 新增 `scripts/validate-ui.mjs` 無外部套件測試，透過既有 Edge 的 DevTools 協定驗證實際 pointer/contextmenu 事件與平板斷點。
+- 驗收通過：門向內／向外拖曳、沿牆移動、門窗右鍵翻轉、家具右鍵旋轉、牆面開口、6px 外框、16px 最小字體、1024×768 與 768×1024 無水平溢位，主控台無錯誤。
