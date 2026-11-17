@@ -3,7 +3,7 @@
   const NS='http://www.w3.org/2000/svg',$=id=>document.getElementById(id),snap=(n,u=20)=>Math.round(n/u)*u,meters=px=>px/40;
   const uid=()=>`i${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`;
   const colors=['#e9e3d5','#dfe8df','#e1e7ea','#eee0d9','#e4e0ec'];
-  const doorKinds=['single','double','sliding','folding'],windowKinds=['fixed','slider','bay','screen'];
+  const doorKinds=['single','mother','double','swing','sliding','doublesliding','bypass','pocket','folding','revolving','rolling','curtain','entry'],windowKinds=['opening','fixed','slider','louver','casement','screen','bay'];
   const toolCopy={select:['選取與移動','拖曳房間、門窗與家具可移動；雙擊房間可編輯角點'],wall:['繪製牆體','按住並拖曳；按 Shift 鎖定水平或垂直'],room:['建立房間','重疊時可勾選合併為非方形空間'],door:['放置門片','從牆面向內或向外拖曳，決定門片弧線方向'],window:['放置窗戶','從右側選擇固定窗、橫拉窗、凸窗或紗窗'],furniture:['配置設施','家具、衛浴、樓梯與柱體會自動歸入房間'],dimension:['輸入尺寸','點擊房間或牆體輸入精確尺寸'],erase:['安全刪除','點擊物件後再次確認，避免誤刪']};
   let state={items:[],project:'我的新家'},history=[],future=[],tool='select',start=null,selected=null,furnitureType='sofa',openingType='single';
   let dragInfo=null,handleDrag=null,panInfo=null,editingRoomId=null,lastRoomTap=null,view={x:0,y:0,w:1200,h:760};
@@ -45,9 +45,9 @@
   function roomArea(room){return polyArea(getPoints(room))/1600}
   function resizeRoom(room,w,h){const old=boundsOf(getPoints(room)),sx=w/old.w,sy=h/old.h;room.points=getPoints(room).map(p=>({x:old.x+(p.x-old.x)*sx,y:old.y+(p.y-old.y)*sy}));syncBounds(room)}
 
-  function furnitureDims(source){const type=typeof source==='string'?source:source?.name,base={sofa:{w:90,h:38},bed:{w:70,h:100},table:{w:70,h:50},desk:{w:65,h:30},island:{w:80,h:34},plant:{w:34,h:34},bathtub:{w:95,h:40},toilet:{w:34,h:48},sink:{w:40,h:36},cabinet:{w:80,h:30},stairs:{w:70,h:110},column:{w:40,h:40}}[type]||{w:60,h:40};return typeof source==='object'&&source?{w:source.width>0?source.width*40:base.w,h:source.height>0?source.height*40:base.h}:base}
-  function furnitureName(type){return{sofa:'沙發',bed:'床組',table:'餐桌',desk:'書桌',island:'中島',plant:'植栽',bathtub:'浴缸',toilet:'馬桶',sink:'洗手台',cabinet:'櫃體',stairs:'樓梯',column:'結構柱'}[type]||'家具'}
-  function openingName(type){return{single:'單開門',double:'雙開門',sliding:'拉門',folding:'折疊門',fixed:'固定窗',slider:'橫拉窗',bay:'凸窗',screen:'紗窗'}[type]||'開口'}
+  function furnitureDims(source){const type=typeof source==='string'?source:source?.name,base={sofa:{w:90,h:38},bed:{w:70,h:100},table:{w:70,h:50},desk:{w:65,h:30},island:{w:80,h:34},plant:{w:34,h:34},bathtub:{w:95,h:40},toilet:{w:34,h:48},sink:{w:40,h:36},cabinet:{w:80,h:30},stairs:{w:70,h:110},column:{w:40,h:40},elevator:{w:70,h:70},ramp:{w:120,h:40}}[type]||{w:60,h:40};return typeof source==='object'&&source?{w:source.width>0?source.width*40:base.w,h:source.height>0?source.height*40:base.h}:base}
+  function furnitureName(type){return{sofa:'沙發',bed:'床組',table:'餐桌',desk:'書桌',island:'中島',plant:'植栽',bathtub:'浴缸',toilet:'馬桶',sink:'洗手台',cabinet:'櫃體',stairs:'樓梯',column:'結構柱',elevator:'電梯',ramp:'坡道'}[type]||'家具'}
+  function openingName(type){return{single:'單開門',mother:'子母門',double:'雙開門',swing:'雙向門',sliding:'單拉門',doublesliding:'雙拉門',bypass:'雙向拉門',pocket:'拉進門',folding:'折疊門',revolving:'迴轉門',rolling:'捲門',curtain:'門簾',entry:'出入口',opening:'牆開窗',fixed:'固定窗',slider:'雙橫拉窗',louver:'百葉窗',casement:'單開窗',bay:'凸窗',screen:'紗窗'}[type]||'開口'}
   function itemLabel(item){if(item.type==='furniture')return furnitureName(item.name);if(item.type==='door'||item.type==='window')return openingName(item.kind);return item.name||({room:'房間',wall:'牆體'}[item.type]||'物件')}
 
   function openModal({title,message='',fields=[],confirmLabel='確認',danger=false,onConfirm}){
