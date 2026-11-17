@@ -548,7 +548,8 @@
     wall: ['id', 'type', 'x1', 'y1', 'x2', 'y2', 'thickness', 'name', 'color'],
     door: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'swing', 'hinge', 'flipped', 'name', 'color'],
     window: ['id', 'type', 'kind', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'sill', 'flipped', 'name', 'color'],
-    furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'color']
+    furniture: ['id', 'type', 'name', 'x', 'y', 'rotation', 'rotationManual', 'parentRoomId', 'wallRef', 'width', 'height', 'color'],
+    dimension: ['id', 'type', 'a', 'b', 'offset', 'mode', 'label', 'aRef', 'bRef'] // 手動尺寸標註（features/dimensions.js）
   };
   const finite = v => typeof v === 'number' && Number.isFinite(v);
   function normalizeDrawing(raw) {
@@ -571,7 +572,15 @@
         } else delete it.points;
         if (!it.points) ok = ['x', 'y', 'w', 'h'].every(k => finite(it[k])) && it.w > 0 && it.h > 0;
       } else if (it.type === 'wall') ok = ['x1', 'y1', 'x2', 'y2'].every(k => finite(it[k]));
-      else {
+      else if (it.type === 'dimension') {
+        const pt = v => v && finite(v.x) && finite(v.y) ? { x: v.x, y: v.y } : null;
+        it.a = pt(it.a); it.b = pt(it.b);
+        ok = !!(it.a && it.b);
+        it.offset = finite(it.offset) ? it.offset : 20;
+        it.mode = 'manual';
+        it.label = typeof it.label === 'string' && it.label.trim() ? it.label.trim().slice(0, 40) : null;
+        for (const k of ['aRef', 'bRef']) { const r = it[k]; if (r && typeof r === 'object' && Number.isInteger(r.i) && r.i >= 0) it[k] = { id: String(r.id ?? ''), i: r.i }; else delete it[k]; }
+      } else {
         ok = finite(it.x) && finite(it.y);
         if (it.type === 'door') {
           if (!DOOR_KINDS.includes(it.kind)) it.kind = 'single';
@@ -599,6 +608,7 @@
     out.forEach(it => {
       if ('parentRoomId' in it) { const m = idMap.get(it.parentRoomId); it.parentRoomId = m && ids.has(m) ? m : null; }
       if (it.wallRef) { const m = idMap.get(it.wallRef.id); if (m && ids.has(m)) it.wallRef.id = m; else delete it.wallRef; }
+      for (const k of ['aRef', 'bRef']) if (it[k]) { const m = idMap.get(it[k].id); if (m && ids.has(m)) it[k].id = m; else delete it[k]; }
       if (it.type === 'room') P.syncBounds(it);
     });
     if (!out.length && doc.items.length) throw new Error('檔案中沒有可辨識的圖面物件');
