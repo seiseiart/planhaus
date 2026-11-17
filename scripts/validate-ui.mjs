@@ -4,7 +4,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const sitePort = process.env.PLANHAUS_SITE_PORT || '4175';
 const debugPort = process.env.PLANHAUS_DEBUG_PORT || '9223';
 const siteUrl = `http://127.0.0.1:${sitePort}/`;
-const target = await fetch(`http://127.0.0.1:${debugPort}/json/new?${siteUrl}`, { method: 'PUT' }).then(r => r.json());
+const target = await fetch(`http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(siteUrl)}`, { method: 'PUT' }).then(r => r.json());
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {
   ws.addEventListener('open', resolve, { once: true });
@@ -40,7 +40,12 @@ async function evaluate(expression) {
 
 async function navigate(url = siteUrl) {
   await cdp('Page.navigate', { url });
-  await sleep(350);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await sleep(100);
+    const ready = await evaluate(`location.href === ${JSON.stringify(url)} && document.readyState === 'complete'`).catch(() => false);
+    if (ready) return;
+  }
+  throw new Error(`Page did not finish loading: ${url}`);
 }
 
 async function point(x, y) {
@@ -86,7 +91,7 @@ const seeded = {
   items: [{ id: 'room-test', type: 'room', x: 200, y: 200, w: 600, h: 400, name: '測試房間', color: '#e9e3d5' }]
 };
 await evaluate(`localStorage.setItem('planhaus-project', ${JSON.stringify(JSON.stringify(seeded))}); location.reload(); true`);
-await sleep(350);
+await sleep(800);
 
 const base = await evaluate(`(() => ({
   title: document.title,
@@ -186,6 +191,29 @@ assert.equal(sofa.width, 2.1);
 assert.equal(sofa.height, 0.9);
 assert.equal(await evaluate(`!!document.querySelector('.fsize-hit')`), true);
 
+const legacyFurnitureFields = await evaluate(`(() => ({
+  name: getComputedStyle(document.querySelector('#itemName').parentElement).display,
+  size: getComputedStyle(document.querySelector('#itemWidth').closest('.field-row')).display,
+  color: getComputedStyle(document.querySelector('#itemColor').parentElement).display
+}))()`);
+assert.deepEqual(legacyFurnitureFields, { name: 'none', size: 'none', color: 'none' });
+
+const attachedDoorBeforeResize = state.items.find(i => i.id === movedDoor.id);
+await evaluate(`(() => {
+  const room = window.Planhaus.state.items.find(i => i.id === 'room-test');
+  window.Planhaus.selected = room.id;
+  window.Planhaus.render();
+  const field = document.querySelector('#itemWidth');
+  field.value = '20';
+  field.dispatchEvent(new Event('change', { bubbles: true }));
+})()`);
+state = await drawing();
+const attachedDoorAfterResize = state.items.find(i => i.id === movedDoor.id);
+win = state.items.find(i => i.id === win.id);
+assert.ok(attachedDoorAfterResize.x > attachedDoorBeforeResize.x + 90, `${attachedDoorBeforeResize.x} -> ${attachedDoorAfterResize.x}`);
+assert.equal(attachedDoorAfterResize.y, 200);
+assert.deepEqual(attachedDoorAfterResize.wallRef, { kind: 'room', id: 'room-test', edge: 0 });
+
 const zoomPoint = await point(700, 500);
 const zoomAnchorBefore = await evaluate(`window.Planhaus.screenToPlan(${zoomPoint.x}, ${zoomPoint.y})`);
 await cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: zoomPoint.x, y: zoomPoint.y, deltaX: 0, deltaY: -120 });
@@ -275,7 +303,7 @@ await evaluate(`document.querySelector('#closeInspector').click()`);
 
 await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
 const pinchBefore = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
-const pinchCenter = await point(900, 600);
+const pinchCenter = await point(1040, 100);
 await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
   { x: pinchCenter.x - 45, y: pinchCenter.y, id: 11, radiusX: 5, radiusY: 5, force: 1 },
   { x: pinchCenter.x + 45, y: pinchCenter.y, id: 12, radiusX: 5, radiusY: 5, force: 1 }
@@ -290,7 +318,7 @@ const pinchAfter = await evaluate(`document.querySelector('#planCanvas').getAttr
 assert.notEqual(pinchAfter, pinchBefore);
 
 const beforePan = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
-const panStart = await point(1050, 700), panEnd = { x: panStart.x - 70, y: panStart.y - 45 };
+const panStart = await point(800, 100), panEnd = { x: panStart.x - 70, y: panStart.y - 45 };
 await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: panStart.x, y: panStart.y, id: 1, radiusX: 5, radiusY: 5, force: 1 }] });
 await cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: panEnd.x, y: panEnd.y, id: 1, radiusX: 5, radiusY: 5, force: 1 }] });
 await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -307,6 +335,8 @@ const mobile = await evaluate(`(() => ({
   fileVisible: getComputedStyle(document.querySelector('#fileBtn')).display !== 'none',
   exportVisible: getComputedStyle(document.querySelector('#exportBtn')).display !== 'none',
   settingsVisible: getComputedStyle(document.querySelector('#inspectorToggle')).display !== 'none',
+  topActionWidth: document.querySelector('#fileBtn').getBoundingClientRect().width,
+  topActionHeight: document.querySelector('#fileBtn').getBoundingClientRect().height,
   inspectorInert: document.querySelector('#inspector').inert,
   overflow: document.documentElement.scrollWidth <= innerWidth
 }))()`);
@@ -316,6 +346,8 @@ assert.ok(mobile.toolWidth >= 64);
 assert.equal(mobile.fileVisible, true);
 assert.equal(mobile.exportVisible, true);
 assert.equal(mobile.settingsVisible, true);
+assert.ok(mobile.topActionWidth >= 44);
+assert.ok(mobile.topActionHeight >= 44);
 assert.equal(mobile.inspectorInert, true);
 assert.equal(mobile.overflow, true);
 await evaluate(`document.querySelector('#inspectorToggle').click(); const field=document.querySelector('#mobileProjectName'); field.value='手機圖面'; field.dispatchEvent(new Event('change',{bubbles:true}))`);
@@ -328,9 +360,32 @@ await sleep(80);
 assert.equal(await evaluate(`document.body.classList.contains('inspector-hidden')`), false);
 assert.equal(await evaluate(`document.querySelector('#inspector').inert`), false);
 
+const mergeSeed = {
+  project: '合併回歸驗證',
+  items: [
+    { id: 'room-a', type: 'room', x: 100, y: 100, w: 200, h: 200, name: 'A' },
+    { id: 'room-b', type: 'room', x: 400, y: 100, w: 200, h: 200, name: 'B' },
+    { id: 'door-b', type: 'door', kind: 'single', x: 500, y: 100, width: .9, height: 2.1, rotation: 180, swing: 'in', hinge: 'left', parentRoomId: 'room-b', wallRef: { kind: 'room', id: 'room-b', edge: 0 } }
+  ]
+};
+await evaluate(`localStorage.setItem('planhaus-project', ${JSON.stringify(JSON.stringify(mergeSeed))}); location.reload(); true`);
+await sleep(800);
+await evaluate(`document.querySelector('[data-tool="room"]').click()`);
+await drag(await point(250, 150), await point(450, 250));
+assert.equal(await evaluate(`!document.querySelector('#appModal').classList.contains('hidden')`), true);
+await evaluate(`document.querySelector('#modalFields input[type="checkbox"]').checked = true; document.querySelector('#modalConfirm').click()`);
+await sleep(120);
+state = await drawing();
+const mergedRooms = state.items.filter(i => i.type === 'room');
+const mergedDoor = state.items.find(i => i.id === 'door-b');
+assert.equal(mergedRooms.length, 1);
+assert.equal(mergedDoor.parentRoomId, mergedRooms[0].id);
+assert.equal(mergedDoor.wallRef.id, mergedRooms[0].id);
+assert.ok(Number.isInteger(mergedDoor.wallRef.edge));
+
 assert.deepEqual(errors, []);
 await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
 await cdp('Emulation.clearDeviceMetricsOverride');
 await cdp('Target.closeTarget', { targetId: target.id });
 ws.close();
-console.log(JSON.stringify({ base, openingMarkup, cloudModules, manualDimension, resizedSofa: { width: sofa.width, height: sofa.height }, exportModal, tabletLandscape, tabletPortrait, mobile, navigation: { zoomAnchorBefore, zoomAnchorAfter, middleBefore, middleAfter, spaceBefore, spaceAfter, pinchBefore, pinchAfter, beforePan, afterPan }, errors, result: 'PASS' }, null, 2));
+console.log(JSON.stringify({ base, openingMarkup, cloudModules, manualDimension, resizedSofa: { width: sofa.width, height: sofa.height }, legacyFurnitureFields, attachedDoorBeforeResize, attachedDoorAfterResize, mergedDoor, exportModal, tabletLandscape, tabletPortrait, mobile, navigation: { zoomAnchorBefore, zoomAnchorAfter, middleBefore, middleAfter, spaceBefore, spaceAfter, pinchBefore, pinchAfter, beforePan, afterPan }, errors, result: 'PASS' }, null, 2));

@@ -132,6 +132,64 @@
     return true;
   }
 
+  function roomEdge(room, edge) {
+    const pts = P.getPoints(room);
+    if (!pts.length) return null;
+    const index = ((edge % pts.length) + pts.length) % pts.length;
+    return { a: pts[index], b: pts[(index + 1) % pts.length], kind: 'room', id: room.id, edge: index, room, thick: 2 };
+  }
+  function placeOnRoomEdge(it, room, edge, t) {
+    const s = roomEdge(room, edge), probe = s && project({ x: s.a.x + (s.b.x - s.a.x) * t, y: s.a.y + (s.b.y - s.a.y) * t }, s);
+    if (!s || !probe) return false;
+    const n = normalFor(s, probe, probe.q);
+    let along = clamp(t, 0, 1) * probe.len;
+    if (it.type === 'door' || it.type === 'window') {
+      const rotation = rotationFromNormal(n), ux = { x: Math.cos(rad(rotation)), y: Math.sin(rad(rotation)) };
+      const sign = ux.x * probe.dir.x + ux.y * probe.dir.y >= 0 ? 1 : -1;
+      const [lo, hi] = openingSpan(it).map(v => v * sign).sort((a, b) => a - b);
+      if (hi - lo < probe.len) along = clamp(along, -lo, probe.len - hi);
+      it.x = round(s.a.x + probe.dir.x * along, 1); it.y = round(s.a.y + probe.dir.y * along, 1);
+      it.rotation = rotation;
+    } else if (it.type === 'furniture') {
+      const d = P.furnitureDims(it), off = d.h / 2 + s.thick / 2;
+      if (d.w < probe.len) along = clamp(along, d.w / 2, probe.len - d.w / 2);
+      it.x = round(s.a.x + probe.dir.x * along + n.x * off, 1); it.y = round(s.a.y + probe.dir.y * along + n.y * off, 1);
+      it.rotation = rotationFromNormal(n);
+    } else return false;
+    it.parentRoomId = room.id;
+    it.wallRef = { kind: 'room', id: room.id, edge: s.edge };
+    delete it.rotationManual;
+    return true;
+  }
+  function nearestRoomProjection(room, p) {
+    let best = null;
+    P.getPoints(room).forEach((_, edge) => {
+      const s = roomEdge(room, edge), pr = s && project(p, s);
+      if (pr && (!best || pr.dist < best.pr.dist)) best = { edge, pr };
+    });
+    return best;
+  }
+  function syncRoomAttachments(room, previousRooms = []) {
+    const previous = new Map((Array.isArray(previousRooms) ? previousRooms : [previousRooms]).filter(Boolean).map(r => [r.id, r]));
+    const currentCount = P.getPoints(room).length;
+    for (const it of items()) {
+      if (it.wallRef?.kind !== 'room') continue;
+      const oldHost = previous.get(it.wallRef.id);
+      if (it.wallRef.id !== room.id && !oldHost) continue;
+      let target = null;
+      if (oldHost && P.getPoints(oldHost).length === currentCount && Number.isInteger(it.wallRef.edge)) {
+        const old = roomEdge(oldHost, it.wallRef.edge), pr = old && project(it, old);
+        if (pr) target = { edge: it.wallRef.edge, t: pr.t };
+      }
+      if (!target) {
+        const nearest = nearestRoomProjection(room, it);
+        if (nearest) target = { edge: nearest.edge, t: nearest.pr.t };
+      }
+      if (target) placeOnRoomEdge(it, room, target.edge, target.t);
+    }
+  }
+  P.syncRoomAttachments = syncRoomAttachments;
+
   /* ---------------- 放置：門窗家具自動吸附牆面 ---------------- */
   P.hooks.place.push((common, tool, p, sub) => {
     if (tool === 'door' || tool === 'window') {
@@ -448,8 +506,8 @@
   function renderArchPanel(it) {
     if (archPanel.contains(document.activeElement)) return; // 避免輸入中被重繪
     // 原「寬度／高度」欄位只作用於房間；其他物件改用建築屬性面板
-    const sizeRow = $('itemWidth')?.closest('.field-row');
-    if (sizeRow) sizeRow.hidden = !!it && it.type !== 'room';
+    const legacyRows = [$('itemName')?.parentElement, $('itemWidth')?.closest('.field-row'), $('itemColor')?.parentElement].filter(Boolean);
+    legacyRows.forEach(row => { row.hidden = !!it && it.type !== 'room'; });
     archPanel.innerHTML = '';
     archPanel.classList.toggle('hidden', !it);
     if (!it) return;
