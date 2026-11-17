@@ -150,6 +150,42 @@ state = await drawing();
 sofa = state.items.find(i => i.id === sofa.id);
 assert.equal(sofa.rotation, 90);
 
+const cloudModules = await evaluate(`(() => ({
+  symbols: !!window.PlanhausSymbols,
+  dimensions: !!window.PlanhausDimensions,
+  furnitureSize: !!window.PlanhausFurnitureSize,
+  doorKinds: document.querySelectorAll('[data-opening]').length,
+  autoLabels: [...document.querySelectorAll('.dim-auto .dim-text')].map(node => node.textContent)
+}))()`);
+assert.equal(cloudModules.symbols, true);
+assert.equal(cloudModules.dimensions, true);
+assert.equal(cloudModules.furnitureSize, true);
+assert.equal(cloudModules.doorKinds, 20);
+assert.ok(cloudModules.autoLabels.includes('15.00 m'));
+assert.ok(cloudModules.autoLabels.includes('10.00 m'));
+
+await evaluate(`window.PlanhausDimensions.setDimMode(true)`);
+await drag(await point(200, 200), await point(800, 200));
+state = await drawing();
+const manualDimension = state.items.find(i => i.type === 'dimension');
+assert.ok(manualDimension);
+assert.deepEqual(manualDimension.aRef, { id: 'room-test', i: 0 });
+assert.deepEqual(manualDimension.bRef, { id: 'room-test', i: 1 });
+assert.equal(await evaluate(`document.querySelectorAll('.dim-manual').length`), 1);
+await evaluate(`window.PlanhausDimensions.setDimMode(false)`);
+
+await evaluate(`(() => {
+  const sofa = window.Planhaus.state.items.find(i => i.type === 'furniture' && i.name === 'sofa');
+  window.Planhaus.selected = sofa.id;
+  window.Planhaus.render();
+  [...document.querySelectorAll('.fsize-presets button')].find(button => button.textContent.startsWith('三人'))?.click();
+})()`);
+state = await drawing();
+sofa = state.items.find(i => i.id === sofa.id);
+assert.equal(sofa.width, 2.1);
+assert.equal(sofa.height, 0.9);
+assert.equal(await evaluate(`!!document.querySelector('.fsize-hit')`), true);
+
 const zoomPoint = await point(700, 500);
 const zoomAnchorBefore = await evaluate(`window.Planhaus.screenToPlan(${zoomPoint.x}, ${zoomPoint.y})`);
 await cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: zoomPoint.x, y: zoomPoint.y, deltaX: 0, deltaY: -120 });
@@ -297,4 +333,4 @@ await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
 await cdp('Emulation.clearDeviceMetricsOverride');
 await cdp('Target.closeTarget', { targetId: target.id });
 ws.close();
-console.log(JSON.stringify({ base, openingMarkup, exportModal, tabletLandscape, tabletPortrait, mobile, navigation: { zoomAnchorBefore, zoomAnchorAfter, middleBefore, middleAfter, spaceBefore, spaceAfter, pinchBefore, pinchAfter, beforePan, afterPan }, errors, result: 'PASS' }, null, 2));
+console.log(JSON.stringify({ base, openingMarkup, cloudModules, manualDimension, resizedSofa: { width: sofa.width, height: sofa.height }, exportModal, tabletLandscape, tabletPortrait, mobile, navigation: { zoomAnchorBefore, zoomAnchorAfter, middleBefore, middleAfter, spaceBefore, spaceAfter, pinchBefore, pinchAfter, beforePan, afterPan }, errors, result: 'PASS' }, null, 2));
