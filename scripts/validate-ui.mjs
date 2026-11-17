@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const target = await fetch('http://127.0.0.1:9223/json/new?http://127.0.0.1:4175/', { method: 'PUT' }).then(r => r.json());
+const sitePort = process.env.PLANHAUS_SITE_PORT || '4175';
+const debugPort = process.env.PLANHAUS_DEBUG_PORT || '9223';
+const siteUrl = `http://127.0.0.1:${sitePort}/`;
+const target = await fetch(`http://127.0.0.1:${debugPort}/json/new?${siteUrl}`, { method: 'PUT' }).then(r => r.json());
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {
   ws.addEventListener('open', resolve, { once: true });
@@ -35,7 +38,7 @@ async function evaluate(expression) {
   return result.result.value;
 }
 
-async function navigate(url = 'http://127.0.0.1:4175/') {
+async function navigate(url = siteUrl) {
   await cdp('Page.navigate', { url });
   await sleep(350);
 }
@@ -45,7 +48,8 @@ async function point(x, y) {
 }
 
 async function mouse(type, p, button = 'left', buttons = type === 'mouseMoved' ? 1 : undefined) {
-  const activeButtons = buttons ?? (type === 'mousePressed' ? (button === 'right' ? 2 : 1) : 0);
+  const mask = button === 'right' ? 2 : button === 'middle' ? 4 : 1;
+  const activeButtons = buttons ?? (type === 'mousePressed' ? mask : 0);
   await cdp('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button, clickCount: 1, buttons: activeButtons });
 }
 
@@ -86,10 +90,11 @@ await sleep(350);
 
 const base = await evaluate(`(() => ({
   title: document.title,
-  roomStroke: getComputedStyle(document.querySelector('.plan-room')).strokeWidth,
-  minFont: getComputedStyle(document.querySelector('.tool')).fontSize,
+  roomStroke: document.querySelector('.plan-room') ? getComputedStyle(document.querySelector('.plan-room')).strokeWidth : null,
+  minFont: document.querySelector('.tool') ? getComputedStyle(document.querySelector('.tool')).fontSize : null,
   svgReady: !!document.querySelector('#planCanvas')
 }))()`);
+if (!base.roomStroke) throw new Error(`Room failed to render: ${JSON.stringify({ base, errors, saved: await drawing() })}`);
 assert.equal(base.svgReady, true);
 assert.equal(base.roomStroke, '6px');
 assert.equal(base.minFont, '16px');
@@ -145,6 +150,48 @@ state = await drawing();
 sofa = state.items.find(i => i.id === sofa.id);
 assert.equal(sofa.rotation, 90);
 
+const zoomPoint = await point(700, 500);
+const zoomAnchorBefore = await evaluate(`window.Planhaus.screenToPlan(${zoomPoint.x}, ${zoomPoint.y})`);
+await cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x: zoomPoint.x, y: zoomPoint.y, deltaX: 0, deltaY: -120 });
+await sleep(80);
+const zoomAnchorAfter = await evaluate(`window.Planhaus.screenToPlan(${zoomPoint.x}, ${zoomPoint.y})`);
+assert.ok(Math.abs(zoomAnchorAfter.x - zoomAnchorBefore.x) < 0.5);
+assert.ok(Math.abs(zoomAnchorAfter.y - zoomAnchorBefore.y) < 0.5);
+
+const middleBefore = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+const middleStart = await point(900, 650), middleEnd = { x: middleStart.x + 60, y: middleStart.y + 30 };
+await mouse('mousePressed', middleStart, 'middle');
+await mouse('mouseMoved', middleEnd, 'middle', 4);
+await mouse('mouseReleased', middleEnd, 'middle');
+await sleep(80);
+const middleAfter = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+assert.notEqual(middleAfter, middleBefore);
+
+const spaceBefore = middleAfter;
+await cdp('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+const spaceStart = await point(960, 660), spaceEnd = { x: spaceStart.x - 55, y: spaceStart.y + 25 };
+await drag(spaceStart, spaceEnd);
+await cdp('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+const spaceAfter = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+assert.notEqual(spaceAfter, spaceBefore);
+
+await evaluate(`document.querySelector('#exportBtn').click()`);
+const exportModal = await evaluate(`(() => ({
+  visible: !document.querySelector('.export-modal').classList.contains('hidden'),
+  actions: [...document.querySelectorAll('.export-modal [data-export]')].map(node => node.dataset.export)
+}))()`);
+assert.equal(exportModal.visible, true);
+assert.deepEqual(exportModal.actions, ['svg', 'png', 'pdf', 'close']);
+const svgExport = await evaluate(`(() => {
+  const original = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { this.dataset.testDownload = 'true'; };
+  document.querySelector('.export-modal [data-export="svg"]').click();
+  HTMLAnchorElement.prototype.click = original;
+  return { toast: document.querySelector('#toast').textContent, closed: document.querySelector('.export-modal').classList.contains('hidden') };
+})()`);
+assert.equal(svgExport.toast, '已匯出可攜式 SVG');
+assert.equal(svgExport.closed, true);
+
 await cdp('Emulation.setDeviceMetricsOverride', { width: 1024, height: 768, deviceScaleFactor: 1, mobile: false });
 await navigate();
 const tabletLandscape = await evaluate(`(() => ({
@@ -190,7 +237,22 @@ await evaluate(`document.querySelector('#inspectorToggle').click()`);
 assert.equal(await evaluate(`document.querySelector('#archPanel')?.textContent.includes('翻轉窗戶方向')`), true);
 await evaluate(`document.querySelector('#closeInspector').click()`);
 
-await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+const pinchBefore = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+const pinchCenter = await point(900, 600);
+await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
+  { x: pinchCenter.x - 45, y: pinchCenter.y, id: 11, radiusX: 5, radiusY: 5, force: 1 },
+  { x: pinchCenter.x + 45, y: pinchCenter.y, id: 12, radiusX: 5, radiusY: 5, force: 1 }
+] });
+await cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [
+  { x: pinchCenter.x - 80, y: pinchCenter.y - 10, id: 11, radiusX: 5, radiusY: 5, force: 1 },
+  { x: pinchCenter.x + 80, y: pinchCenter.y + 10, id: 12, radiusX: 5, radiusY: 5, force: 1 }
+] });
+await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await sleep(80);
+const pinchAfter = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+assert.notEqual(pinchAfter, pinchBefore);
+
 const beforePan = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
 const panStart = await point(1050, 700), panEnd = { x: panStart.x - 70, y: panStart.y - 45 };
 await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: panStart.x, y: panStart.y, id: 1, radiusX: 5, radiusY: 5, force: 1 }] });
@@ -235,4 +297,4 @@ await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
 await cdp('Emulation.clearDeviceMetricsOverride');
 await cdp('Target.closeTarget', { targetId: target.id });
 ws.close();
-console.log(JSON.stringify({ base, openingMarkup, tabletLandscape, tabletPortrait, mobile, touchPan: { beforePan, afterPan }, errors, result: 'PASS' }, null, 2));
+console.log(JSON.stringify({ base, openingMarkup, exportModal, tabletLandscape, tabletPortrait, mobile, navigation: { zoomAnchorBefore, zoomAnchorAfter, middleBefore, middleAfter, spaceBefore, spaceAfter, pinchBefore, pinchAfter, beforePan, afterPan }, errors, result: 'PASS' }, null, 2));

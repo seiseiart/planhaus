@@ -1,0 +1,4 @@
+.export-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:18px 0}
+.export-options button{min-height:52px}
+@media(max-width:640px){.export-options{grid-template-columns:1fr}.export-options button{min-height:56px}}
+
