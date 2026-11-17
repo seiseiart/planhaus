@@ -1,0 +1,16 @@
+/* 築間 Planhaus — 尺寸標註（features/dimensions.js） */
+.dim-auto,.dim-live{pointer-events:none}
+.dim-text{font-family:"DM Sans","Noto Sans TC",sans-serif;letter-spacing:.01em;user-select:none}
+.dim-manual{cursor:grab}
+.dim-manual .dim-hit{pointer-events:stroke}
+.dim-manual:not(.selected-dim) .dim-text{opacity:.92}
+.dim-handle{fill:#fff;stroke:#e76f4c;stroke-width:3;cursor:move;filter:url(#shadow)}
+#planCanvas.dim-mode{cursor:crosshair}
+#planCanvas.dim-mode .plan-room,#planCanvas.dim-mode .plan-wall{cursor:crosshair}
+.dim-toolbar{position:absolute;top:12px;right:12px;z-index:6;display:flex;gap:6px;background:rgba(255,254,250,.94);border:1px solid var(--line,#d8dedb);border-radius:9px;padding:4px;box-shadow:0 4px 12px rgba(23,50,77,.08)}
+.dim-toolbar button{min-width:52px;min-height:36px;border:1px solid transparent;border-radius:6px;background:transparent;color:#4f6470;font-weight:700;font-size:13px;cursor:pointer}
+.dim-toolbar button[aria-pressed="true"]{background:#fff0e9;border-color:#d86c4a;color:#a5432d}
+#dimPanel .dim-panel-len{font-size:12px;color:#4f6470;margin:0 0 10px}
+#dimPanel .section-title button{border:0;background:none;color:#a94438;font-weight:700;cursor:pointer}
+/* 觸控裝置：控制點與按鈕放大到 44px 以上 */
+@media (pointer:coarse){.dim-toolbar button{min-width:56px;min-height:44px;font-size:15px}.dim-handle{r:12}}
