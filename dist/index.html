@@ -2,8 +2,9 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17324d">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M10 54V30L32 10l22 20v24H39V38H25v16z' fill='%2317324d'/%3E%3C/svg%3E">
   <title>築間 Planhaus｜房屋平面設計工作台</title>
   <meta name="description" content="在瀏覽器中快速繪製牆體、房間、門窗與家具，完成清楚可分享的房屋平面設計圖。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,9 +23,9 @@
       <span id="saveState" class="save-state"><i></i> 已儲存</span>
       <button class="icon-btn" id="undoBtn" title="復原 Ctrl+Z" aria-label="復原">↶</button>
       <button class="icon-btn" id="redoBtn" title="重做 Ctrl+Y" aria-label="重做">↷</button>
-      <button class="secondary-btn" id="newBtn">新增圖面</button>
-      <button class="secondary-btn file-btn" id="fileBtn" title="圖面檔案 Ctrl+O">圖面檔</button>
-      <button class="primary-btn" id="exportBtn">匯出圖面 <span>↗</span></button>
+      <button class="secondary-btn" id="newBtn" aria-label="新增圖面">新增圖面</button>
+      <button class="secondary-btn file-btn" id="fileBtn" title="圖面檔案 Ctrl+O" aria-label="開啟圖面檔案">圖面檔</button>
+      <button class="primary-btn" id="exportBtn" aria-label="匯出圖面">匯出圖面 <span>↗</span></button>
     </div>
   </header>
 
@@ -55,7 +56,7 @@
       <div class="contextbar">
         <div><span class="eyebrow">目前工具</span><strong id="toolTitle">選取與移動</strong></div>
         <p id="toolHint">點選圖面元素，查看或調整設定</p>
-        <button id="inspectorToggle" class="mini-btn inspector-toggle">設定</button>
+        <button id="inspectorToggle" class="mini-btn inspector-toggle" aria-controls="inspector" aria-expanded="false">設定</button>
         <div class="view-actions">
           <button id="gridBtn" class="mini-btn active"># 格線</button>
           <button id="fitBtn" class="mini-btn">⊡ 適合畫面</button>
@@ -85,14 +86,16 @@
         <div id="emptyTip" class="empty-tip">
           <div class="tip-illustration"><span></span><span></span><span></span><i></i></div>
           <strong>從牆體或房間開始</strong>
-          <p>按住滑鼠拖曳即可繪製，所有線段會自動吸附格線。</p>
+          <p>使用滑鼠或手指拖曳即可繪製；選取工具下拖曳空白處可移動畫布。</p>
           <button data-start="room">繪製第一個房間</button>
         </div>
       </div>
     </section>
 
-    <aside class="inspector">
-      <div class="inspector-head"><div><span class="eyebrow">設計資訊</span><h2>空間總覽</h2></div><button id="closeInspector" aria-label="收合">›</button></div>
+    <aside class="inspector" id="inspector" aria-label="圖面設定">
+      <div class="inspector-handle" aria-hidden="true"></div>
+      <div class="inspector-head"><div><span class="eyebrow">設計資訊</span><h2>空間總覽</h2></div><button id="closeInspector" aria-label="關閉設定">×</button></div>
+      <label class="mobile-project-name">專案名稱<input id="mobileProjectName" value="我的新家" aria-label="手機與平板專案名稱"></label>
       <div class="area-card"><span>估算室內面積</span><strong><b id="totalArea">0.0</b> m²</strong><small id="pingArea">約 0.0 坪</small></div>
       <div class="stats-row"><div><span>房間</span><b id="roomCount">0</b></div><div><span>開口</span><b id="openingCount">0</b></div><div><span>家具</span><b id="furnitureCount">0</b></div></div>
 
@@ -132,6 +135,7 @@
       <div class="tips-card"><b>快捷提示</b><p>門片從牆面向內／外拖曳可決定開啟方向。右鍵門窗可翻轉；右鍵其他家具會順時針旋轉 90°。</p></div>
     </aside>
   </main>
+  <button id="inspectorScrim" class="inspector-scrim" aria-label="關閉設定面板" tabindex="-1"></button>
   <div id="toast" class="toast" role="status"></div>
   <div id="appModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-card">

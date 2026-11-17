@@ -418,6 +418,7 @@
       if (it.type === 'window') row(numField('窗台高度', a.sill, { key: 'sill', min: 0, max: 3 }), numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       else row(numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       rotateButtons();
+      if (it.type === 'window') windowFlipButton();
       if (it.type === 'door' && ['single', 'double'].includes(kindOf(it))) doorDirectionButtons();
     } else if (it.type === 'furniture') {
       tag.textContent = it.wallRef ? '● 靠牆' : '';
@@ -467,6 +468,14 @@
         wrap.append(hinge);
       }
       archPanel.append(wrap);
+    }
+
+    function windowFlipButton() {
+      const wrap = document.createElement('div'); wrap.className = 'arch-actions';
+      const flip = document.createElement('button'); flip.className = 'mini-btn';
+      flip.textContent = '翻轉窗戶方向';
+      flip.onclick = () => { const before = P.snapshot(); it.flipped = !it.flipped; P.commit('窗戶方向已翻轉', before); };
+      wrap.append(flip); archPanel.append(wrap);
     }
 
     archPanel.querySelectorAll('input[data-key]').forEach(input => input.addEventListener('change', () => {

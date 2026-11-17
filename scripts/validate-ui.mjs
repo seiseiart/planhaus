@@ -151,11 +151,15 @@ const tabletLandscape = await evaluate(`(() => ({
   grid: getComputedStyle(document.querySelector('.app-shell')).gridTemplateColumns,
   toolWidth: document.querySelector('.tool-rail').getBoundingClientRect().width,
   touchHeight: document.querySelector('.tool').getBoundingClientRect().height,
+  inspectorHidden: document.body.classList.contains('inspector-hidden'),
+  toggleVisible: getComputedStyle(document.querySelector('#inspectorToggle')).display !== 'none',
   overflow: document.documentElement.scrollWidth <= innerWidth
 }))()`);
 assert.ok(tabletLandscape.grid.startsWith('88px '), tabletLandscape.grid);
 assert.equal(Math.round(tabletLandscape.toolWidth), 88);
 assert.ok(tabletLandscape.touchHeight >= 44);
+assert.equal(tabletLandscape.inspectorHidden, true);
+assert.equal(tabletLandscape.toggleVisible, true);
 assert.equal(tabletLandscape.overflow, true);
 
 await cdp('Emulation.setDeviceMetricsOverride', { width: 768, height: 1024, deviceScaleFactor: 1, mobile: false });
@@ -163,18 +167,72 @@ await navigate();
 const tabletPortrait = await evaluate(`(() => ({
   hidden: document.body.classList.contains('inspector-hidden'),
   toggleVisible: getComputedStyle(document.querySelector('#inspectorToggle')).display !== 'none',
-  grid: getComputedStyle(document.querySelector('.app-shell')).gridTemplateColumns,
+  dockPosition: getComputedStyle(document.querySelector('.tool-rail')).position,
+  dockDirection: getComputedStyle(document.querySelector('.tool-rail')).flexDirection,
+  labelVisible: getComputedStyle(document.querySelector('.tool span:not(.tool-icon)')).display !== 'none',
   overflow: document.documentElement.scrollWidth <= innerWidth
 }))()`);
 assert.equal(tabletPortrait.hidden, true);
 assert.equal(tabletPortrait.toggleVisible, true);
-assert.ok(tabletPortrait.grid.startsWith('76px '), tabletPortrait.grid);
+assert.equal(tabletPortrait.dockPosition, 'fixed');
+assert.equal(tabletPortrait.dockDirection, 'row');
+assert.equal(tabletPortrait.labelVisible, true);
 assert.equal(tabletPortrait.overflow, true);
-await evaluate(`document.querySelector('#inspectorToggle').click()`);
+
+await evaluate(`document.querySelector('[data-tool="door"]').click()`);
 assert.equal(await evaluate(`document.body.classList.contains('inspector-hidden')`), false);
+await evaluate(`document.querySelector('[data-opening="single"]').click()`);
+assert.equal(await evaluate(`document.body.classList.contains('inspector-hidden')`), true);
+
+await evaluate(`document.querySelector('[data-tool="select"]').click()`);
+await click(await point(win.x, win.y));
+await evaluate(`document.querySelector('#inspectorToggle').click()`);
+assert.equal(await evaluate(`document.querySelector('#archPanel')?.textContent.includes('翻轉窗戶方向')`), true);
+await evaluate(`document.querySelector('#closeInspector').click()`);
+
+await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+const beforePan = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+const panStart = await point(1050, 700), panEnd = { x: panStart.x - 70, y: panStart.y - 45 };
+await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: panStart.x, y: panStart.y, id: 1, radiusX: 5, radiusY: 5, force: 1 }] });
+await cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: panEnd.x, y: panEnd.y, id: 1, radiusX: 5, radiusY: 5, force: 1 }] });
+await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await sleep(80);
+const afterPan = await evaluate(`document.querySelector('#planCanvas').getAttribute('viewBox')`);
+assert.notEqual(afterPan, beforePan);
+
+await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+await navigate();
+const mobile = await evaluate(`(() => ({
+  dockBottom: getComputedStyle(document.querySelector('.tool-rail')).bottom,
+  dockHeight: document.querySelector('.tool-rail').getBoundingClientRect().height,
+  toolWidth: document.querySelector('.tool').getBoundingClientRect().width,
+  fileVisible: getComputedStyle(document.querySelector('#fileBtn')).display !== 'none',
+  exportVisible: getComputedStyle(document.querySelector('#exportBtn')).display !== 'none',
+  settingsVisible: getComputedStyle(document.querySelector('#inspectorToggle')).display !== 'none',
+  inspectorInert: document.querySelector('#inspector').inert,
+  overflow: document.documentElement.scrollWidth <= innerWidth
+}))()`);
+assert.equal(mobile.dockBottom, '0px');
+assert.ok(mobile.dockHeight >= 82);
+assert.ok(mobile.toolWidth >= 64);
+assert.equal(mobile.fileVisible, true);
+assert.equal(mobile.exportVisible, true);
+assert.equal(mobile.settingsVisible, true);
+assert.equal(mobile.inspectorInert, true);
+assert.equal(mobile.overflow, true);
+await evaluate(`document.querySelector('#inspectorToggle').click(); const field=document.querySelector('#mobileProjectName'); field.value='手機圖面'; field.dispatchEvent(new Event('change',{bubbles:true}))`);
+assert.equal(await evaluate(`JSON.parse(localStorage.getItem('planhaus-project')).project`), '手機圖面');
+assert.equal(await evaluate(`document.querySelector('#projectName').value`), '手機圖面');
+assert.equal(await evaluate(`document.querySelector('#inspector').inert`), false);
+
+await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+await sleep(80);
+assert.equal(await evaluate(`document.body.classList.contains('inspector-hidden')`), false);
+assert.equal(await evaluate(`document.querySelector('#inspector').inert`), false);
 
 assert.deepEqual(errors, []);
+await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
 await cdp('Emulation.clearDeviceMetricsOverride');
 await cdp('Target.closeTarget', { targetId: target.id });
 ws.close();
-console.log(JSON.stringify({ base, openingMarkup, tabletLandscape, tabletPortrait, errors, result: 'PASS' }, null, 2));
+console.log(JSON.stringify({ base, openingMarkup, tabletLandscape, tabletPortrait, mobile, touchPan: { beforePan, afterPan }, errors, result: 'PASS' }, null, 2));
