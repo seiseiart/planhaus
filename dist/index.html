@@ -11,6 +11,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="features/dimensions.css">
+  <link rel="stylesheet" href="features/canvas-navigation.css">
+  <link rel="stylesheet" href="features/export.css">
 </head>
 <body>
   <header class="topbar">
@@ -115,16 +118,24 @@
           <button data-furniture="bathtub"><span>▱</span>浴缸</button><button data-furniture="toilet"><span>◒</span>馬桶</button>
           <button data-furniture="sink"><span>◉</span>洗手台</button><button data-furniture="cabinet"><span>▥</span>櫃體</button>
           <button data-furniture="stairs"><span>▰</span>樓梯</button><button data-furniture="column"><span>■</span>結構柱</button>
+          <button data-furniture="elevator"><span>⊠</span>電梯</button><button data-furniture="ramp"><span>⇢</span>坡道</button>
         </div>
       </section>
 
       <section id="openingPanel" class="panel-section hidden">
         <div class="section-title"><h3 id="openingTitle">開口圖例</h3><span>選擇後放置</span></div>
         <div class="opening-grid">
-          <button data-opening="single">單開門</button><button data-opening="double">雙開門</button>
-          <button data-opening="sliding">拉門</button><button data-opening="folding">折疊門</button>
-          <button data-opening="fixed">固定窗</button><button data-opening="slider">橫拉窗</button>
-          <button data-opening="bay">凸窗</button><button data-opening="screen">紗窗</button>
+          <button data-opening="single">單開門</button><button data-opening="mother">子母門</button>
+          <button data-opening="double">雙開門</button><button data-opening="swing">雙向門</button>
+          <button data-opening="sliding">單拉門</button><button data-opening="doublesliding">雙拉門</button>
+          <button data-opening="bypass">雙向拉門</button><button data-opening="pocket">拉進門</button>
+          <button data-opening="folding">折疊門</button><button data-opening="revolving">迴轉門</button>
+          <button data-opening="rolling">捲門</button><button data-opening="curtain">門簾</button>
+          <button data-opening="entry">出入口</button>
+          <button data-opening="opening">牆開窗</button><button data-opening="fixed">固定窗</button>
+          <button data-opening="slider">雙橫拉窗</button><button data-opening="louver">百葉窗</button>
+          <button data-opening="casement">單開窗</button><button data-opening="screen">紗窗</button>
+          <button data-opening="bay">凸窗</button>
         </div>
       </section>
 
@@ -147,6 +158,11 @@
     </div>
   </div>
   <script src="app.js"></script>
+  <script src="planhaus-symbols.js"></script>
   <script src="planhaus-pro.js"></script>
+  <script src="features/dimensions.js"></script>
+  <script src="features/furniture-size.js"></script>
+  <script src="features/canvas-navigation.js"></script>
+  <script src="features/export.js"></script>
 </body>
 </html>
