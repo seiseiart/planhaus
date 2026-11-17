@@ -22,14 +22,29 @@
   const viewScale = () => P.view.w / 1200;
   const isFacility = it => it && ['door', 'window', 'furniture'].includes(it.type);
 
-  const DOOR_KINDS = ['single', 'double', 'sliding', 'folding'], WINDOW_KINDS = ['fixed', 'slider', 'bay', 'screen'];
-  const FURNITURE = ['sofa', 'bed', 'table', 'desk', 'island', 'plant', 'bathtub', 'toilet', 'sink', 'cabinet', 'stairs', 'column'];
+  const SYM = window.PlanhausSymbols; // planhaus-symbols.js（未載入時沿用 app.js 的簡易圖形）
+  const DOOR_KINDS = ['single', 'mother', 'double', 'swing', 'sliding', 'doublesliding', 'bypass', 'pocket', 'folding', 'revolving', 'rolling', 'curtain', 'entry'];
+  const WINDOW_KINDS = ['opening', 'fixed', 'slider', 'louver', 'casement', 'screen', 'bay'];
+  const FURNITURE = ['sofa', 'bed', 'table', 'desk', 'island', 'plant', 'bathtub', 'toilet', 'sink', 'cabinet', 'stairs', 'column', 'elevator', 'ramp'];
   const RESIZABLE_FURNITURE = ['cabinet', 'column'];
   // 預設尺寸＝app.js 原始繪圖尺寸（例如單開門 36px = 0.9m），比例 1 時外觀不變
   const OPENING_DEFAULTS = {
     single: { width: .9, height: 2.1 }, double: { width: 1.8, height: 2.1 }, sliding: { width: 1.9, height: 2.1 }, folding: { width: 1.9, height: 2.1 },
-    fixed: { width: 1.4, height: 1.2, sill: .9 }, slider: { width: 1.4, height: 1.2, sill: .9 }, screen: { width: 1.4, height: 1.2, sill: .9 }, bay: { width: 1.5, height: 1.5, sill: .5 }
+    fixed: { width: 1.4, height: 1.2, sill: .9 }, slider: { width: 1.4, height: 1.2, sill: .9 }, screen: { width: 1.4, height: 1.2, sill: .9 }, bay: { width: 1.5, height: 1.5, sill: .5 },
+    // 依圖例新增的種類
+    mother: { width: 1.2, height: 2.1 }, swing: { width: 1.6, height: 2.1 }, doublesliding: { width: 1.6, height: 2.1 }, bypass: { width: 1.8, height: 2.1 },
+    pocket: { width: .9, height: 2.1 }, revolving: { width: 2, height: 2.4 }, rolling: { width: 3, height: 3 }, curtain: { width: 1.2, height: 2.1 }, entry: { width: 1.2, height: 2.1 },
+    opening: { width: 1.2, height: 1.2, sill: .9 }, louver: { width: 1.2, height: 1, sill: 1.2 }, casement: { width: .8, height: 1.2, sill: .9 }
   };
+  // 房間外框線寬沿用 styles.css 的 .plan-room（讀取實際樣式，Codex 調整線寬時自動跟上）
+  let roomStrokePx = 6;
+  const readRoomStroke = () => { const n = layer.querySelector('.plan-room'); const v = n && parseFloat(getComputedStyle(n).strokeWidth); if (v > 0) roomStrokePx = v; return roomStrokePx; };
+  // 開口所在牆的厚度（px）
+  function hostThickness(it) {
+    const host = it.wallRef && byId(it.wallRef.id);
+    if (host?.type === 'wall') return toPx(wallThickness(host));
+    return roomStrokePx;
+  }
   const WALL_THICKNESS = .3, CEILING = 2.8; // 0.3m = 原 CSS 牆線 12px
 
   const kindOf = it => it.kind || (it.type === 'door' ? 'single' : 'fixed');
@@ -282,14 +297,42 @@
   });
 
   /* ---------------- 繪製附加圖層 ---------------- */
+  /* ---------------- 圖例繪製（planhaus-symbols.js） ---------------- */
+  function decorateSymbol(it, node) {
+    if (it.type === 'door' || it.type === 'window') {
+      node.replaceChildren(SYM.openingGroup(it, toPx(openingAttrs(it).width), hostThickness(it)));
+      node.classList.add('plan-symbol');
+    } else if (it.type === 'furniture') {
+      const sym = SYM.facility(it.name, P.furnitureDims(it));
+      if (sym) { const g = el('g', { transform: `translate(${it.x} ${it.y})` }); g.append(...sym); node.replaceChildren(g); node.classList.add('plan-symbol'); }
+    }
+  }
+  // 圖層：房間 → 牆芯（淺灰填心，呈現圖例的雙線牆）→ 獨立牆 → 家具 → 門窗（門窗切開牆）
+  function layerSymbols() {
+    const by = { room: [], wall: [], furniture: [], opening: [] }, cores = el('g', { class: 'room-wall-core', 'pointer-events': 'none' });
+    for (const it of items()) {
+      const node = layer.querySelector(`[data-id="${CSS.escape(it.id)}"]`);
+      if (!node) continue;
+      if (it.type === 'room') { by.room.push(node); cores.append(SYM.wallBand(P.getPoints(it), roomStrokePx, true, false)[1]); }
+      else if (it.type === 'wall') {
+        const t = toPx(wallThickness(it)), len = Math.hypot(it.x2 - it.x1, it.y2 - it.y1) || 1, ux = (it.x2 - it.x1) / len, uy = (it.y2 - it.y1) / len, k = 1.3;
+        by.wall.push(node, el('line', { x1: it.x1 + ux * k, y1: it.y1 + uy * k, x2: it.x2 - ux * k, y2: it.y2 - uy * k, stroke: '#b9c2c1', 'stroke-width': Math.max(1, t - 2.6), 'stroke-linecap': 'square', 'pointer-events': 'none', class: 'wall-core' }));
+      } else if (it.type === 'furniture') by.furniture.push(node);
+      else if (it.type === 'door' || it.type === 'window') by.opening.push(node);
+    }
+    layer.prepend(...by.room, cores, ...by.wall, ...by.furniture, ...by.opening);
+  }
+
   function decorate() {
     const sel = byId(P.selected);
+    if (SYM) readRoomStroke();
     if (activeVertex && P.editingRoomId !== activeVertex.id) activeVertex = null;
 
     for (const it of items()) {
       const node = layer.querySelector(`[data-id="${CSS.escape(it.id)}"]`);
       if (!node) continue;
       if (it.type === 'wall') node.style.strokeWidth = toPx(wallThickness(it)) + 'px';
+      if (SYM) { decorateSymbol(it, node); continue; }
       if (it.type === 'door' || it.type === 'window') {
         const a = openingAttrs(it), s = a.width / a.defWidth, [lo, hi] = openingSpan({ ...it, width: a.defWidth });
         // 透明點擊範圍：開口線很細，補一個容易點選的區域
@@ -303,10 +346,14 @@
       }
     }
 
+    if (SYM) layerSymbols();
+
     // 角點編輯：邊中點「＋」與角點選取
     const room = byId(P.editingRoomId);
     if (room?.points) {
-      const g = layer.querySelector(`[data-id="${CSS.escape(room.id)}"]`);
+      // 牆芯疊在房間上方，角點移到最上層避免被遮住
+      const g = SYM ? el('g', { class: 'pro-ui vertex-ui' }) : layer.querySelector(`[data-id="${CSS.escape(room.id)}"]`);
+      if (SYM) { layer.querySelectorAll(`[data-id="${CSS.escape(room.id)}"] .vertex-handle`).forEach(h => g.append(h)); layer.append(g); }
       g?.querySelectorAll('.vertex-handle').forEach(h => {
         const idx = +h.dataset.index;
         if (activeVertex?.id === room.id && activeVertex.index === idx) h.classList.add('active');
@@ -346,9 +393,11 @@
       knob.addEventListener('pointerdown', ev => beginRotate(ev, sel));
       ui.append(knob);
       if (sel.type !== 'furniture') {
-        const a = openingAttrs(sel), s = a.width / a.defWidth, at = toWorld(sel.type === 'door' ? 36 * s + 18 : 26);
+        const a = openingAttrs(sel), s = a.width / a.defWidth, w = toPx(a.width);
+        const at = SYM ? toWorld(SYM.annotDepth(sel, w, hostThickness(sel)) * (sel.type === 'door' && sel.swing === 'out' ? -1 : 1)) : toWorld(sel.type === 'door' ? 36 * s + 18 : 26);
+        if (SYM) { const c = SYM.centerOffset(sel, w); at.x += Math.cos(r) * c; at.y += Math.sin(r) * c; }
         const t = el('text', { x: at.x, y: at.y + 4, class: 'arch-annot' });
-        t.textContent = `W${a.width.toFixed(2)} × H${a.height.toFixed(2)}` + (sel.type === 'window' ? ` · 台${a.sill.toFixed(2)}` : '');
+        t.textContent = `${P.openingName(kindOf(sel))} W${a.width.toFixed(2)} × H${a.height.toFixed(2)}` + (sel.type === 'window' ? ` · 台${a.sill.toFixed(2)}` : '');
         ui.append(t);
       } else if (RESIZABLE_FURNITURE.includes(sel.name)) {
         const d = P.furnitureDims(sel), at = toWorld(d.h / 2 + 20);
@@ -419,7 +468,7 @@
       else row(numField('旋轉角度', it.rotation || 0, { key: 'rotation', step: 15, unit: '°' }));
       rotateButtons();
       if (it.type === 'window') windowFlipButton();
-      if (it.type === 'door' && ['single', 'double'].includes(kindOf(it))) doorDirectionButtons();
+      if (it.type === 'door' && !['rolling', 'curtain', 'entry', 'revolving'].includes(kindOf(it))) doorDirectionButtons();
     } else if (it.type === 'furniture') {
       tag.textContent = it.wallRef ? '● 靠牆' : '';
       tag.className = it.wallRef ? 'snap-on' : '';
@@ -461,7 +510,7 @@
       swing.textContent = it.swing === 'out' ? '目前外開・改為內開' : '目前內開・改為外開';
       swing.onclick = () => { const before = P.snapshot(); it.swing = it.swing === 'out' ? 'in' : 'out'; P.commit('門片方向已更新', before); };
       wrap.append(swing);
-      if (kindOf(it) === 'single') {
+      if (['single', 'mother', 'pocket', 'sliding'].includes(kindOf(it))) {
         const hinge = document.createElement('button'); hinge.className = 'mini-btn';
         hinge.textContent = it.hinge === 'right' ? '鉸鏈在右・換到左側' : '鉸鏈在左・換到右側';
         hinge.onclick = () => { const before = P.snapshot(); it.hinge = it.hinge === 'right' ? 'left' : 'right'; P.commit('門片左右已更新', before); };
